@@ -353,6 +353,11 @@ contract VillageEdgeTest is EndgameTest {
         vm.expectRevert("Boost active or invalid resource");
         game.treasury(0, 4);
         uint64 shield = game.village(alice).shieldUntil;
+        // The 7-day founding shield outlasts a 12 h peace shield: buying one now would burn 4,000 SEED
+        // for nothing, so it is refused before any SEED is checked.
+        vm.expectRevert("Shield already active");
+        game.treasury(1, 0);
+        vm.warp(shield);
         vm.expectRevert(SeedLedger.InsufficientSeed.selector);
         game.treasury(1, 0);
         assertEq(game.village(alice).peaceUsedAt, 0);
@@ -406,7 +411,27 @@ contract VillageEdgeTest is EndgameTest {
         vm.expectRevert("Clan full or missing");
         game.joinClan(id + 1);
         vm.prank(bob);
+        vm.expectRevert("Not invited");
         game.joinClan(id);
+        // Only the founder invites; a revoked invitation admits nobody.
+        vm.prank(bob);
+        vm.expectRevert("Only founder invites");
+        game.inviteToClan(bob, true);
+        vm.prank(alice);
+        vm.expectRevert("Only founder invites");
+        game.inviteToClan(address(0), true);
+        vm.startPrank(alice);
+        game.inviteToClan(bob, true);
+        game.inviteToClan(bob, false);
+        vm.stopPrank();
+        vm.prank(bob);
+        vm.expectRevert("Not invited");
+        game.joinClan(id);
+        vm.prank(alice);
+        game.inviteToClan(bob, true);
+        vm.prank(bob);
+        game.joinClan(id);
+        assertFalse(clans.invited(address(game), id, bob), "invitation not consumed");
         vm.prank(bob);
         vm.expectRevert("Cannot join");
         game.joinClan(id);
@@ -414,6 +439,44 @@ contract VillageEdgeTest is EndgameTest {
         vm.expectRevert("Cannot raise capacity");
         game.raiseClanCapacity();
         assertEq(clans.clan(address(game), id).members.length, 2);
+        // Leaving does not leave a standing invitation behind: rejoining needs a fresh one.
+        vm.prank(bob);
+        game.leaveClan();
+        vm.prank(bob);
+        vm.expectRevert("Not invited");
+        game.joinClan(id);
+    }
+
+    function testPeaceShieldExtendsOnlyAnExpiredOrShorterShieldAndRespectsCooldown() public {
+        // Fund alice above two shields' worth through a real checkpoint and claim.
+        vm.warp(game.village(alice).shieldUntil);
+        _checkpoint(1_000_000_000);
+        vm.prank(alice);
+        game.claimSeed();
+        uint256 before = game.seedBalance(alice);
+        assertGe(before, 8000 * U);
+        uint256 burnedBefore = ledger.burned(address(game));
+        vm.prank(alice);
+        game.treasury(1, 0);
+        assertEq(game.seedBalance(alice), before - 4000 * U);
+        assertEq(game.village(alice).shieldUntil, vm.getBlockTimestamp() + 12 hours);
+        assertEq(game.village(alice).peaceUsedAt, vm.getBlockTimestamp());
+        // A second purchase while this shield runs is refused before the cooldown or any burn.
+        vm.prank(alice);
+        vm.expectRevert("Peace cooldown");
+        game.treasury(1, 0);
+        // Cooldown is exactly 3 days from purchase.
+        uint256 bought = vm.getBlockTimestamp();
+        vm.warp(bought + 3 days - 1);
+        vm.prank(alice);
+        vm.expectRevert("Peace cooldown");
+        game.treasury(1, 0);
+        vm.warp(bought + 3 days);
+        vm.prank(alice);
+        game.treasury(1, 0);
+        assertEq(game.seedBalance(alice), before - 8000 * U);
+        assertEq(ledger.burned(address(game)) - burnedBefore, 8000 * U);
+        assertEq(game.village(alice).shieldUntil, bought + 3 days + 12 hours);
     }
 
     /// forge-config: default.fuzz.runs = 512

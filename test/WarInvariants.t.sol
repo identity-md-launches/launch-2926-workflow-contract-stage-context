@@ -241,14 +241,34 @@ contract WarHandler is Test {
         _check(s0, 3, false, false);
     }
 
+    /// @dev The founder (players[0]) opens or revokes an invitation; a non-founder's attempt must revert.
+    function invite(uint8 a, uint8 by, bool open) external {
+        address who = players[1 + a % 2];
+        address inviter = players[by % 3];
+        Snap memory s0 = _snap();
+        vm.prank(inviter);
+        try game.inviteToClan(who, open) {
+            if (inviter != players[0]) _fail("non-founder invited");
+            if (clans.invited(address(game), clanId, who) != open) _fail("invitation not recorded");
+        } catch {
+            if (inviter == players[0]) _fail("founder invite reverted");
+        }
+        _check(s0, 3, false, false);
+    }
+
     function toggleClan(uint8 a) external {
         address who = players[1 + a % 2];
         Snap memory s0 = _snap();
-        vm.prank(who);
         if (clans.clanOf(address(game), who) != 0) {
+            vm.prank(who);
             try game.leaveClan() {} catch {}
         } else {
-            try game.joinClan(clanId) {} catch {}
+            bool wasInvited = clans.invited(address(game), clanId, who);
+            vm.prank(who);
+            try game.joinClan(clanId) {
+                if (!wasInvited) _fail("joined without invitation");
+                if (clans.invited(address(game), clanId, who)) _fail("invitation not consumed");
+            } catch {}
         }
         _check(s0, 3, false, false);
     }
@@ -289,6 +309,8 @@ contract WarInvariantTest is StdInvariant, EndgameTest {
         _barracks(carol);
         vm.prank(alice);
         uint256 id = game.foundClan("Hams");
+        vm.prank(alice);
+        game.inviteToClan(bob, true);
         vm.prank(bob);
         game.joinClan(id);
         _troops(alice, 0, 100);
