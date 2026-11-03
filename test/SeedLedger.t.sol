@@ -83,6 +83,35 @@ contract SeedLedgerTest is GameTest {
         assertEq(ledger.lastCumulativeWork(), 100_000);
     }
 
+    function testRepointToSameCoreRebaselinesDecreasedCounter() public {
+        core.setWork(99_000);
+        vm.warp(vm.getBlockTimestamp() + 1 days);
+        vm.expectRevert(SeedLedger.WorkDecreased.selector);
+        ledger.checkpoint();
+        vm.prank(owner);
+        ledger.proposeRepoint(address(core), address(nft));
+        vm.warp(vm.getBlockTimestamp() + 72 hours);
+        vm.prank(owner);
+        ledger.applyRepoint();
+        assertEq(ledger.lastCumulativeWork(), 99_000);
+        ledger.checkpoint();
+        assertEq(ledger.lastWork(), 0);
+        _found(carol, "Carol");
+        assertTrue(game.village(carol).foundedAt != 0);
+    }
+
+    function testRepointToSameCoreKeepsUncheckpointedWork() public {
+        core.setWork(105_000);
+        vm.prank(owner);
+        ledger.proposeRepoint(address(core), address(nft));
+        vm.warp(vm.getBlockTimestamp() + 72 hours);
+        vm.prank(owner);
+        ledger.applyRepoint();
+        assertEq(ledger.lastCumulativeWork(), 100_000);
+        ledger.checkpoint();
+        assertEq(ledger.lastWork(), 5000);
+    }
+
     function testZeroWorkCheckpointStillClaimableOnce() public {
         _checkpoint(0);
         vm.prank(alice);

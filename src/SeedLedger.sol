@@ -235,7 +235,9 @@ contract SeedLedger is Guard {
     function applyRepoint() external onlyOwner nonReentrant {
         if (repointAfter == 0 || block.timestamp < repointAfter) revert TimelockPending();
         // Rebaseline a replacement Core, preventing old or lower counters from creating rewards.
-        if (pendingCore != core) lastCumulativeWork = _work(pendingCore);
+        // A repoint to the same Core also rebaselines a counter that went backwards, restoring checkpoints.
+        uint64 current = _work(pendingCore);
+        if (pendingCore != core || current < lastCumulativeWork) lastCumulativeWork = current;
         _nftBalance(pendingSqueek, owner);
         core = pendingCore;
         squeek = pendingSqueek;

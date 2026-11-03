@@ -235,6 +235,24 @@ contract VillagesTest is GameTest {
         assertEq(game.village(alice).shieldUntil, vm.getBlockTimestamp() + 12 hours);
     }
 
+    function testPeaceShieldRefusedWhileLongerShieldRunsAndChargesNothing() public {
+        _checkpoint(100_000);
+        vm.prank(alice);
+        game.claimSeed();
+        uint256 seed = game.seedBalance(alice);
+        uint64 founding = game.village(alice).shieldUntil;
+        vm.expectRevert("Shield already active");
+        vm.prank(alice);
+        game.treasury(1, 0);
+        assertEq(game.seedBalance(alice), seed);
+        assertEq(game.village(alice).peaceUsedAt, 0);
+        vm.warp(founding - 12 hours + 1);
+        vm.prank(alice);
+        game.treasury(1, 0);
+        assertEq(game.seedBalance(alice), seed - 4000 * U);
+        assertEq(game.village(alice).shieldUntil, vm.getBlockTimestamp() + 12 hours);
+    }
+
     function testBuildSpeedSnapshotsCurrentNFTAtOrderAfterTransfer() public {
         _checkpoint(11000);
         nft.setBalance(alice, 1);

@@ -60,6 +60,80 @@ contract CombatMathTest is GameTest {
         assertEq(army.home(address(world), alice)[0], attackers - deadAttack);
     }
 
+    function _stack(address who, uint8 kind, uint32 count) private {
+        if (count == 0) return;
+        world.train(who, kind, count);
+        vm.warp(army.training(address(world), who).readyAt);
+        army.completeTraining(address(world), who);
+    }
+
+    function _mixedRaid(uint32[7] memory defenders, uint32 spearmen)
+        private
+        returns (uint256 id, Army.Report memory r)
+    {
+        for (uint8 i; i < 7; ++i) {
+            _stack(bob, i, defenders[i]);
+        }
+        _stack(alice, 0, spearmen);
+        // Field Medicine off, so casualties are the raw apportionment.
+        world.configure(bob, G.Context(true, 1, 10, 10, 10, 10, 3, 4_000_000, 0));
+        uint32[7] memory units;
+        units[0] = spearmen;
+        id = world.send(alice, bob, units, false);
+        vm.warp(army.movement(address(world), id).arriveAt);
+        army.resolve(address(world), id);
+        r = army.report(address(world), id);
+    }
+
+    function testSmallRaidCannotKillWholeSingleUnitStacks() public {
+        uint32[7] memory defenders;
+        defenders[2] = 1000;
+        defenders[4] = 1;
+        defenders[5] = 1;
+        (, Army.Report memory r) = _mixedRaid(defenders, 1);
+        assertFalse(r.decisive);
+        uint32[7] memory home = army.home(address(world), bob);
+        // 1,002 units x 0.5 x attack/defense rounds up to one casualty for the whole army, taken from
+        // the Shieldbearers, whose fractional share is largest; the lone Charger and Catapult survive.
+        assertEq(home[2], 999);
+        assertEq(home[4], 1);
+        assertEq(home[5], 1);
+        assertEq(r.defenderLostValue, 220);
+        assertEq(world.points(alice, 2), 220);
+    }
+
+    function testFuzzMixedArmyCasualtiesRoundOnceForTheWholeArmy(uint32[7] memory defenders, uint32 spearmen)
+        public
+    {
+        uint256 total;
+        for (uint8 i; i < 7; ++i) {
+            defenders[i] = uint32(bound(defenders[i], 0, 5000));
+            total += defenders[i];
+        }
+        vm.assume(total != 0);
+        spearmen = uint32(bound(spearmen, 1, 20_000));
+        (, Army.Report memory r) = _mixedRaid(defenders, spearmen);
+        uint32[7] memory home = army.home(address(world), bob);
+        uint256 lostUnits;
+        uint256 lostValue;
+        for (uint8 i; i < 7; ++i) {
+            uint256 lost = defenders[i] - home[i];
+            uint256 share = uint256(defenders[i]) * r.attack;
+            if (r.decisive) {
+                assertEq(lost, defenders[i]);
+            } else {
+                uint256 floor_ = share / (2 * r.defense);
+                if (floor_ >= defenders[i]) assertEq(lost, defenders[i]);
+                else assertTrue(lost == floor_ || lost == floor_ + 1, "stack loses its floor or one more");
+            }
+            lostUnits += lost;
+            lostValue += lost * rules.unitValue(i);
+        }
+        uint256 expected = r.decisive ? total : G.min(total, G.ceilDiv(total * r.attack, 2 * r.defense));
+        assertEq(lostUnits, expected, "army casualties rounded up once");
+        assertEq(r.defenderLostValue, lostValue);
+    }
+
     function testReentrancyDuringBattleCannotResolveTwice() public {
         uint256 id = _prepare(100, 10);
         world.setReentry(id);

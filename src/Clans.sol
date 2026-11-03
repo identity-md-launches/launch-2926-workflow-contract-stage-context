@@ -31,10 +31,12 @@ contract Clans {
         mapping(bytes32 => bool) names;
         mapping(address => Counters) season;
         mapping(uint256 => mapping(address => Counters)) weeklyCounters;
+        mapping(uint256 => mapping(address => bool)) invited;
     }
     mapping(address => World) private worlds;
     event ClanFounded(address indexed game, uint256 indexed clanId, address indexed founder, string name);
     event Joined(address indexed game, uint256 indexed clanId, address indexed player);
+    event Invited(address indexed game, uint256 indexed clanId, address indexed player, bool open);
     event Left(address indexed game, uint256 indexed clanId, address indexed player);
     event CapacityRaised(address indexed game, uint256 indexed clanId, uint256 capacity);
     event Ranked(
@@ -56,6 +58,10 @@ contract Clans {
     function sameClan(address game, address a, address b) public view returns (bool) {
         uint256 id = worlds[game].membership[a];
         return id != 0 && id == worlds[game].membership[b];
+    }
+
+    function invited(address game, uint256 id, address player) external view returns (bool) {
+        return worlds[game].invited[id][player];
     }
 
     function clan(address game, uint256 id) external view returns (Clan memory) {
@@ -102,9 +108,20 @@ contract Clans {
         Clan storage c = w.clans[id];
         require(hall >= 1 && player != address(0) && w.membership[player] == 0, "Cannot join");
         require(c.founder != address(0) && c.members.length < c.capacity, "Clan full or missing");
+        require(w.invited[id][player], "Not invited");
+        delete w.invited[id][player];
         w.membership[player] = id;
         c.members.push(player);
         emit Joined(msg.sender, id, player);
+    }
+
+    /// @notice Only the founder admits members; an invitation is consumed by joining.
+    function invite(address founder, address player, bool open) external {
+        World storage w = worlds[msg.sender];
+        uint256 id = w.membership[founder];
+        require(id != 0 && w.clans[id].founder == founder && player != address(0), "Only founder invites");
+        w.invited[id][player] = open;
+        emit Invited(msg.sender, id, player, open);
     }
 
     function leave(address player) external {

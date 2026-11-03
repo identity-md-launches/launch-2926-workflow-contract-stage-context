@@ -480,9 +480,9 @@ contract Army is Guard {
     ) private returns (uint256 killed) {
         IVillages(game).armyTouch(who);
         uint256 lostRoom;
+        uint256[7] memory losses = wipe || own == 0 ? _all(units) : _casualties(units, enemy, own);
         for (uint8 i; i < 7; ++i) {
-            uint256 lost =
-                wipe || own == 0 ? units[i] : G.min(units[i], G.ceilDiv(uint256(units[i]) * enemy, own * 2));
+            uint256 lost = losses[i];
             if (medicine && !wipe) lost -= lost / 10;
             if (lost != 0) {
                 units[i] -= uint32(lost);
@@ -492,6 +492,47 @@ contract Army is Guard {
             }
         }
         worlds[game].room[who] -= lostRoom;
+    }
+
+    function _all(uint32[7] memory units) private pure returns (uint256[7] memory losses) {
+        for (uint8 i; i < 7; ++i) {
+            losses[i] = units[i];
+        }
+    }
+
+    /// @dev Rounds the army's casualties up once, not per stack: each stack loses its floored share of
+    /// min(1, enemy / (2 * own)) and the aggregate remainder goes, one unit each, to the stacks with the
+    /// largest fractional parts.
+    function _casualties(uint32[7] memory units, uint256 enemy, uint256 own)
+        private
+        pure
+        returns (uint256[7] memory losses)
+    {
+        uint256 denominator = own * 2;
+        uint256[7] memory remainder;
+        uint256 total;
+        uint256 floored;
+        for (uint8 i; i < 7; ++i) {
+            uint256 share = uint256(units[i]) * enemy;
+            if (share >= uint256(units[i]) * denominator) {
+                losses[i] = units[i];
+            } else {
+                losses[i] = share / denominator;
+                remainder[i] = share % denominator;
+            }
+            total += units[i];
+            floored += losses[i];
+        }
+        uint256 extra = G.min(total, G.ceilDiv(total * enemy, denominator)) - floored;
+        for (; extra != 0; --extra) {
+            uint8 best = 7;
+            for (uint8 i; i < 7; ++i) {
+                if (remainder[i] != 0 && (best == 7 || remainder[i] > remainder[best])) best = i;
+            }
+            if (best == 7) break;
+            ++losses[best];
+            remainder[best] = 0;
+        }
     }
 
     function _carry(address game, Movement storage m, uint8 tier) private view returns (uint256 capacity) {

@@ -35,7 +35,8 @@ Use confirmed addresses from the deployment handoff. Wallet writes go to **Villa
 | `allocateChampion(might, attack, defense, carry)` | Set cumulative allocations; each may only increase |
 | `send(target, campId, units[7], champion, mode)` | Dispatch owned home troops; zero target explicitly selects a wild camp, not an unset deployment address |
 | `recall(movementId)` | Return stationed support; callable by troop owner or supported village |
-| `foundClan(name)` / `joinClan(id)` / `leaveClan()` | Membership gates; founder can leave only after other members |
+| `foundClan(name)` / `joinClan(id)` / `leaveClan()` | Membership gates; joining needs the founder's invitation; founder can leave only after other members |
+| `inviteToClan(wallet, open)` | Founder invites (`true`) or withdraws an invitation (`false`); read `Clans.invited(villagesAddress, clanId, wallet)` |
 | `raiseClanCapacity()` | Founder refreshes capacity after a Clan Hall upgrade |
 
 No player action takes a source-wallet argument. The wallet's address is its identity for this season; it cannot rename or transfer its village. Contract wallets work through the same `msg.sender` rule. No EOA-only checks or `tx.origin` are used.

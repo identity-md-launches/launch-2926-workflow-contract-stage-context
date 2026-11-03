@@ -15,6 +15,8 @@ contract ClansTest is EndgameTest {
         _barracks(bob);
         vm.prank(alice);
         id = game.foundClan("Hamsters");
+        vm.prank(alice);
+        game.inviteToClan(bob, true);
         vm.prank(bob);
         game.joinClan(id);
         vm.warp(vm.getBlockTimestamp() + 8 days);
@@ -88,6 +90,12 @@ contract ClansTest is EndgameTest {
         vm.prank(bob);
         game.leaveClan();
         uint256 id = _send(alice, bob, 0, 0, 8, true, 1);
+        // The first invitation was spent on joining; rejoining needs a new one.
+        vm.expectRevert("Not invited");
+        vm.prank(bob);
+        game.joinClan(clanId);
+        vm.prank(alice);
+        game.inviteToClan(bob, true);
         vm.prank(bob);
         game.joinClan(clanId);
         _arrive(id);
@@ -121,8 +129,10 @@ contract ClansTest is EndgameTest {
         // Test the module's bounded membership independently in this test's namespace.
         uint256 id = clans.found(alice, "Capacity", 3);
         for (uint256 i; i < 8; ++i) {
+            clans.invite(alice, address(uint160(2000 + i)), true);
             clans.join(address(uint160(2000 + i)), id, 1);
         }
+        clans.invite(alice, carol, true);
         vm.expectRevert("Clan full or missing");
         clans.join(carol, id, 1);
         vm.expectRevert("Cannot raise capacity");
@@ -130,6 +140,59 @@ contract ClansTest is EndgameTest {
         clans.raiseCapacity(alice, 4);
         clans.join(carol, id, 1);
         assertEq(clans.clan(address(this), id).members.length, 10);
+    }
+
+    function testUninvitedJoinRevertsAndCannotCancelRaid() public {
+        _advanceTo(alice, 4);
+        _clanHall(alice, 3);
+        _barracks(alice);
+        _advanceTo(bob, 4);
+        _clanHall(bob, 1);
+        vm.prank(alice);
+        uint256 clanId = game.foundClan("Hamsters");
+        vm.warp(vm.getBlockTimestamp() + 8 days);
+        _troops(alice, 0, 8);
+        uint256 id = _send(alice, bob, 0, 0, 8, false, 1);
+        vm.expectRevert("Not invited");
+        vm.prank(bob);
+        game.joinClan(clanId);
+        assertFalse(clans.sameClan(address(game), alice, bob));
+        _arrive(id);
+        Army.Report memory r = army.report(address(game), id);
+        assertFalse(r.cancelled);
+        assertEq(r.attack, 320);
+    }
+
+    function testOnlyFounderInvitesAndRevokedInvitationCannotJoin() public {
+        _advanceTo(alice, 4);
+        _clanHall(alice, 3);
+        _advanceTo(bob, 4);
+        _clanHall(bob, 1);
+        vm.prank(alice);
+        uint256 id = game.foundClan("Hamsters");
+        vm.expectRevert("Only founder invites");
+        vm.prank(bob);
+        game.inviteToClan(bob, true);
+        vm.expectRevert(abi.encodeWithSignature("NoVillage()"));
+        vm.prank(outsider);
+        game.inviteToClan(bob, true);
+        vm.prank(alice);
+        game.inviteToClan(bob, true);
+        assertTrue(clans.invited(address(game), id, bob));
+        vm.prank(alice);
+        game.inviteToClan(bob, false);
+        vm.expectRevert("Not invited");
+        vm.prank(bob);
+        game.joinClan(id);
+        vm.prank(alice);
+        game.inviteToClan(bob, true);
+        vm.prank(bob);
+        game.joinClan(id);
+        assertFalse(clans.invited(address(game), id, bob));
+        // A member who is not the founder cannot admit anyone either.
+        vm.expectRevert("Only founder invites");
+        vm.prank(bob);
+        game.inviteToClan(carol, true);
     }
 
     function testRankingFormulaWeekIsolationAndCanonicalNamespace() public {

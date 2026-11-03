@@ -15,12 +15,12 @@ Additional checks used during implementation are `forge build --sizes`, focused 
 
 | Test source | Coverage |
 | --- | --- |
-| `SeedLedger.t.sol` | Initial baseline, daily boundary/replay, zero work, batch claims, new-village eligibility, counter decreases, uint64 maximum work, namespace isolation, live NFT XP, historical output integral, missing/malformed/reentrant readers, timelock cancellation/replacement/renunciation |
+| `SeedLedger.t.sol` | Initial baseline, daily boundary/replay, zero work, batch claims, new-village eligibility, counter decreases and same-Core repoint recovery, uint64 maximum work, namespace isolation, live NFT XP, historical output integral, missing/malformed/reentrant readers, timelock cancellation/replacement/renunciation |
 | `Rules.t.sol` | Numeric quote checks, all maximum levels/units, invalid inputs, exhaustive 10,000-tile permutation, camp separation, distance, capacity monotonicity fuzz, 30% NFT reduction bound fuzz |
-| `Villages.t.sol` | Founding/name rules, map allocation, two build slots, plot reservations, cancel refunds, queue replay, research prerequisites/counters, production and fractional-settlement fuzz, storage, Market burn/cap rollback, treasury duration/cooldown, NFT order snapshots, reader failure rollback, callback access control, ETH rejection |
+| `Villages.t.sol` | Founding/name rules, map allocation, two build slots, plot reservations, cancel refunds, queue replay, research prerequisites/counters, production and fractional-settlement fuzz, storage, Market burn/cap rollback, treasury duration/cooldown and no-charge refusal under a longer shield, NFT order snapshots, reader failure rollback, callback access control, ETH rejection |
 | `Army.t.sol` | Training reservations/upkeep, unlock/room limits, return replay, troop/champion locking, shield changes in flight, raid limits, current NFT stats, point caps, recoverable settlement failure, loot/Vault conservation, low-TH treatment, scouts, camp regrowth/caps, Catapult damage/repair, maximum canonical army |
-| `CombatMath.t.sol` | Independent integer casualty reference fuzz to one million troops per side, zero-attack handling, callback reentrancy, NFT transfer during travel, empty-camp deadline regression, 04:00 UTC camp day |
-| `Clans.t.sol` | Found/join/leave prerequisites, capacity, founder controls, no friendly raids, troop-only support/recall, former-clan return, join during incoming attack, support losses/origin room, season/week score formula and namespace isolation |
+| `CombatMath.t.sol` | Independent integer casualty reference fuzz to one million troops per side, mixed-army whole-army rounding fuzz and the lone-stack regression, zero-attack handling, callback reentrancy, NFT transfer during travel, empty-camp deadline regression, 04:00 UTC camp day |
+| `Clans.t.sol` | Found/invite/join/leave prerequisites, uninvited join refused and cannot cancel a raid, founder-only and revocable invitations, capacity, founder controls, no friendly raids, troop-only support/recall, former-clan return, join during incoming attack, support losses/origin room, season/week score formula and namespace isolation |
 | `Deployment.t.sol` | Constructors with absent dependency code, explicit ownership, zero-argument rejection, all runtime sizes and reachable forbidden-opcode scan |
 | `Invariants.t.sol` | Stateful public-API actions with checkpoint/time changes, claims, builds/cancellations, research, Market, treasury, training, camps, returns, and settlement |
 
@@ -38,16 +38,16 @@ These checks are implementation evidence, not a formal proof or an independent s
 
 ## Recorded final result
 
-The final local run passed **80 reported checks, zero failed, zero skipped**, across nine suites. Foundry reports the five stateful properties as one invariant group: all five passed for 128 runs and 8,192 calls. The five parameterized fuzz tests each passed 256 inputs with the pinned seed. `forge build`, `forge test`, `forge fmt --check`, and `python3 tools/export_abi.py --check` all exited successfully.
+The final local run passed **87 reported checks, zero failed, zero skipped**, across nine suites. Foundry reports the five stateful properties as one invariant group: all five passed for 128 runs and 8,192 calls. The six parameterized fuzz tests each passed 256 inputs with the pinned seed. `forge build`, `forge test`, `forge fmt --check`, and `python3 tools/export_abi.py --check` all exited successfully.
 
 All five application ABIs were regenerated from the final build. Runtime/initcode sizes from those artifacts are:
 
 | Contract | Runtime bytes | Initcode bytes (before arguments) |
 | --- | ---: | ---: |
 | GameRules | 5,717 | 5,743 |
-| SeedLedger | 6,035 | 6,329 |
-| Clans | 5,078 | 5,124 |
-| Army | 21,998 | 22,486 |
-| Villages | 20,306 | 20,947 |
+| SeedLedger | 6,078 | 6,372 |
+| Clans | 5,660 | 5,706 |
+| Army | 23,644 | 24,132 |
+| Villages | 20,583 | 21,231 |
 
 Every application is under EIP-170's 24,576-byte runtime limit and EIP-3860's 49,152-byte initcode limit, including its static constructor arguments. No application bytecode contains an external library link reference. The deployment tests also scan the instantiated runtimes for the protected floor's forbidden reachable opcodes.

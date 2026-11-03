@@ -384,10 +384,11 @@ contract Villages is Guard {
             v.boostUntil = uint64(until);
         } else if (kind == 1) {
             require(v.peaceUsedAt == 0 || block.timestamp >= v.peaceUsedAt + 3 days, "Peace cooldown");
+            until = block.timestamp + 12 hours;
+            require(v.shieldUntil < until, "Shield already active");
             ledger.burn(msg.sender, 4000 * UNIT);
             v.peaceUsedAt = uint64(block.timestamp);
-            until = block.timestamp + 12 hours;
-            if (v.shieldUntil < until) v.shieldUntil = uint64(until);
+            v.shieldUntil = uint64(until);
         } else if (kind == 2) {
             require(!v.banner, "Banner already owned");
             ledger.burn(msg.sender, 1000 * UNIT);
@@ -404,6 +405,10 @@ contract Villages is Guard {
 
     function joinClan(uint256 id) external player nonReentrant {
         clans.join(msg.sender, id, villages[msg.sender].buildings[G.CLAN]);
+    }
+
+    function inviteToClan(address who, bool open) external player nonReentrant {
+        clans.invite(msg.sender, who, open);
     }
 
     function leaveClan() external player nonReentrant {
